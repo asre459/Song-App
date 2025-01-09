@@ -1,5 +1,3 @@
-
-
 const express = require('express');
 const multer = require('multer');
 const path = require('path');
@@ -49,7 +47,8 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const { filename } = req.file;
   const title = req.body.title || filename;
   const desc = req.body.desc || 'No descriptions are here';
-   const newSong = {
+
+  const newSong = {
     id: songs.length + 1,
     title,
     desc,
@@ -84,16 +83,64 @@ router.get('/favorites', (req, res) => {
 // Add to favorites
 router.post('/favorites', (req, res) => {
   const { title } = req.body;
+  if (!title) {
+    return res.status(400).json({ message: 'Title is required to add to favorites.' });
+  }
 
   const sourcePath = path.join(databasePath, title);
-  const targetPath = path.join(databasePath, 'favorites', title);
+  const favoritesPath = path.join(databasePath, 'favorites');
+  const targetPath = path.join(favoritesPath, title);
 
-  if (fs.existsSync(sourcePath) && !fs.existsSync(targetPath)) {
+  if (!fs.existsSync(sourcePath)) {
+    return res.status(404).json({ message: 'Song not found in the database.' });
+  }
+
+  if (!fs.existsSync(favoritesPath)) {
+    fs.mkdirSync(favoritesPath);
+  }
+
+  if (!fs.existsSync(targetPath)) {
     fs.copyFileSync(sourcePath, targetPath);
     res.json({ message: 'Added to favorites successfully.' });
   } else {
-    res.status(400).json({ message: 'Song already in favorites or not found.' });
+    res.status(400).json({ message: 'Song already in favorites.' });
   }
+});
+
+// Update favorite song
+router.put('/favorites/:id', upload.single('file'), (req, res) => {
+  const favoritesPath = path.join(databasePath, 'favorites');
+  const favoriteFiles = fs.readdirSync(favoritesPath);
+  const { id } = req.params;
+
+  if (id < 1 || id > favoriteFiles.length) {
+    return res.status(404).json({ message: 'Favorite not found.' });
+  }
+
+  const oldFileName = favoriteFiles[id - 1];
+  const oldFilePath = path.join(favoritesPath, oldFileName);
+
+  const title = req.body.title || oldFileName;
+  const desc = req.body.desc || 'Updated favorite song';
+  const ext = path.extname(oldFileName);
+  const newFilePath = path.join(favoritesPath, title + ext);
+
+  if (req.file) {
+    // Replace file if new file is uploaded
+    fs.unlinkSync(oldFilePath);
+    fs.renameSync(req.file.path, newFilePath);
+  } else {
+    // Rename existing file
+    fs.renameSync(oldFilePath, newFilePath);
+  }
+
+  const updatedFavorite = {
+    id: parseInt(id),
+    title: title + ext,
+    desc,
+  };
+
+  res.json({ message: 'Favorite updated successfully.', favorite: updatedFavorite });
 });
 
 // Remove from favorites
@@ -154,3 +201,4 @@ router.delete('/:id', (req, res) => {
 });
 
 module.exports = router;
+
